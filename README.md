@@ -1,6 +1,6 @@
 # 모두의 창업 AI솔루션 비교하기
 
-모두의창업 AI 솔루션 업체 데이터를 태그 기반으로 탐색하고 비교할 수 있는 React 프로토타입입니다.
+모두의창업 AI 솔루션 업체 데이터를 태그 기반으로 탐색하고 비교할 수 있는 서비스 입니다.
 
 ## 주요 기능
 
@@ -17,7 +17,7 @@
 
 데이터는 모두의창업 AI 솔루션 업체 원본 JSON을 기반으로 생성됩니다.
 
-- 원본 데이터: `/Users/macintosh/modoo_ai_solution/outputs/modoo_ai_solution/modoo_ai_solution_raw.json`
+- 원본 데이터: 엑셀파일
 - 앱 데이터: `src/data/solutions.ts`
 - 데이터 생성 스크립트: `scripts/build-real-data.mjs`
 
