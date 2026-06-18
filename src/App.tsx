@@ -134,6 +134,15 @@ function compactTags(items: string[], limit: number) {
   return items.filter(Boolean).slice(0, limit);
 }
 
+function getSelectionDeadlineLabel() {
+  const deadline = new Date("2026-06-24T23:59:59+09:00").getTime();
+  const now = Date.now();
+  const diffDays = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
+  if (diffDays > 0) return `D-${diffDays}`;
+  if (diffDays === 0) return "D-Day";
+  return "마감 경과";
+}
+
 const App: React.FC = () => {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -143,6 +152,7 @@ const App: React.FC = () => {
   const [isComparing, setIsComparing] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState<SolutionOrg | null>(null);
   const [sortOption, setSortOption] = useState<SortOption>("default");
+  const [deadlineLabel, setDeadlineLabel] = useState(getSelectionDeadlineLabel);
 
   const hasSelectedCategory = selectedCategories.length > 0;
 
@@ -219,6 +229,15 @@ const App: React.FC = () => {
     [compareIds],
   );
 
+  const compareItems = comparedSolutions.length > 0 ? comparedSolutions : filteredSolutions;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setDeadlineLabel(getSelectionDeadlineLabel());
+    }, 1000 * 60 * 30);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const handleCategorySelect = (categoryId: string) => {
     setSelectedCategories((prev) =>
       prev.includes(categoryId)
@@ -267,6 +286,12 @@ const App: React.FC = () => {
               <p className="mt-2 text-[#8B95A1] text-sm">
                 목적은 여러 개 선택할 수 있어요. 필요한 태그를 눌러 후보를 좁혀보세요.
               </p>
+              <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 shadow-sm border border-gray-100">
+                <span className="text-[12px] font-bold text-[#3182F6]">{deadlineLabel}</span>
+                <span className="text-[12px] font-semibold text-[#4E5968]">
+                  6월 24일까지 선정 필요
+                </span>
+              </div>
             </div>
             {(hasSelectedCategory || selectedTags.length > 0 || query) && (
               <button
@@ -558,9 +583,6 @@ const App: React.FC = () => {
           <button
             disabled={filteredSolutions.length === 0}
             onClick={() => {
-              if (compareIds.length === 0) {
-                setCompareIds(filteredSolutions.slice(0, 3).map((org) => org.id));
-              }
               setIsComparing(true);
             }}
             className={`w-full py-4 rounded-[16px] text-[17px] font-bold transition-colors shadow-lg flex items-center justify-center gap-2 ${
@@ -578,7 +600,7 @@ const App: React.FC = () => {
 
         <CompareView
           isOpen={isComparing}
-          items={comparedSolutions.length > 0 ? comparedSolutions : filteredSolutions.slice(0, 3)}
+          items={compareItems}
           onBack={() => setIsComparing(false)}
           onOpenDetail={(org) => {
             setSelectedOrg(org);
@@ -780,7 +802,7 @@ function CompareView({
   onBack: () => void;
   onOpenDetail: (org: SolutionOrg) => void;
 }) {
-  const compareItems = items.slice(0, 8);
+  const compareItems = items;
   const rows = [
     { id: "popularity", label: "인기", value: (org: SolutionOrg) => `팔로워 ${org.followerCount.toLocaleString("ko-KR")}명` },
     { id: "tags", label: "제공 형태", value: (org: SolutionOrg) => compactTags(org.majorTags, 5).join(", ") },
