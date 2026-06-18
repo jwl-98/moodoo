@@ -8,6 +8,7 @@ import {
   FileSpreadsheet,
   Search,
   ThumbsUp,
+  Users,
   X,
 } from "lucide-react";
 import { SOLUTIONS, SolutionOrg } from "./data/solutions";
@@ -211,6 +212,8 @@ const App: React.FC = () => {
   const [deadlineLabel, setDeadlineLabel] = useState(getSelectionDeadlineLabel);
 
   const hasSelectedCategory = selectedCategories.length > 0;
+  const hasQuery = query.trim().length > 0;
+  const shouldShowResults = hasSelectedCategory || hasQuery;
 
   const secondaryTags = useMemo(
     () =>
@@ -416,61 +419,63 @@ const App: React.FC = () => {
 
         <div
           className={`transition-all duration-500 ease-in-out ${
-            hasSelectedCategory && !isLoading
+            shouldShowResults && !isLoading
               ? "opacity-100 max-h-none mt-8"
               : "opacity-0 max-h-0 overflow-hidden"
           }`}
         >
-          <section className="px-6 md:px-10">
-            <div className="flex items-end justify-between mb-3">
-              <div className="min-w-0 pr-4">
-                <h3 className="text-[17px] font-bold text-[#333D4B]">
-                  더 필요한 조건이 있나요?
-                </h3>
-                <p className="mt-1 text-[13px] text-[#8B95A1]">
-                  선택한 목적 중 하나에 맞는 업체에서, 아래 조건을 모두 만족하는 업체만 보여줘요.
-                </p>
+          {hasSelectedCategory && (
+            <section className="px-6 md:px-10">
+              <div className="flex items-end justify-between mb-3">
+                <div className="min-w-0 pr-4">
+                  <h3 className="text-[17px] font-bold text-[#333D4B]">
+                    더 필요한 조건이 있나요?
+                  </h3>
+                  <p className="mt-1 text-[13px] text-[#8B95A1]">
+                    선택한 목적 중 하나에 맞는 업체에서, 아래 조건을 모두 만족하는 업체만 보여줘요.
+                  </p>
+                </div>
+                <span className="shrink-0 whitespace-nowrap rounded-full bg-[#E8F3FF] px-3 py-1.5 text-[13px] font-bold text-[#3182F6]">
+                  {filteredSolutions.length}개
+                </span>
               </div>
-              <span className="shrink-0 whitespace-nowrap rounded-full bg-[#E8F3FF] px-3 py-1.5 text-[13px] font-bold text-[#3182F6]">
-                {filteredSolutions.length}개
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {secondaryTags.map((tag) => {
-                const isSelected = selectedTags.includes(tag);
-                return (
-                  <button
-                    key={tag}
-                    onClick={() => toggleTag(tag)}
-                    className={`px-4 py-2 rounded-full text-[14px] font-medium transition-colors active:scale-[0.98] ${
-                      isSelected
-                        ? "bg-[#333D4B] text-white"
-                        : "bg-white text-[#4E5968] border border-gray-200"
-                    }`}
-                  >
-                    {tag}
-                    <span className="ml-1 text-[11px] opacity-60">{tagCounts[tag] ?? 0}</span>
-                  </button>
-                );
-              })}
-            </div>
+              <div className="flex flex-wrap gap-2">
+                {secondaryTags.map((tag) => {
+                  const isSelected = selectedTags.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      onClick={() => toggleTag(tag)}
+                      className={`px-4 py-2 rounded-full text-[14px] font-medium transition-colors active:scale-[0.98] ${
+                        isSelected
+                          ? "bg-[#333D4B] text-white"
+                          : "bg-white text-[#4E5968] border border-gray-200"
+                      }`}
+                    >
+                      {tag}
+                      <span className="ml-1 text-[11px] opacity-60">{tagCounts[tag] ?? 0}</span>
+                    </button>
+                  );
+                })}
+              </div>
 
-            {selectedTags.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {selectedTags.map((tag) => (
-                  <button
-                    key={tag}
-                    type="button"
-                    onClick={() => toggleTag(tag)}
-                    className="flex items-center gap-1 rounded-full bg-[#E8F3FF] px-3 py-1.5 text-[12px] font-bold text-[#1B64DA]"
-                  >
-                    {tag}
-                    <X size={13} />
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
+              {selectedTags.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {selectedTags.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => toggleTag(tag)}
+                      className="flex items-center gap-1 rounded-full bg-[#E8F3FF] px-3 py-1.5 text-[12px] font-bold text-[#1B64DA]"
+                    >
+                      {tag}
+                      <X size={13} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
           <section className="px-6 md:px-10 mt-8">
             <div className="mb-4 flex items-end justify-between gap-3">
@@ -548,9 +553,15 @@ const App: React.FC = () => {
                             )}
                           </div>
                           <div className="min-w-0">
-                            <h4 className="text-[18px] font-bold text-[#191F28] leading-6">
-                              {org.name}
-                            </h4>
+                            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                              <h4 className="whitespace-normal break-keep text-[18px] font-bold text-[#191F28] leading-6">
+                                {org.name}
+                              </h4>
+                              <span className="inline-flex shrink-0 items-center gap-1 rounded-[6px] bg-[#E8F3FF] px-2 py-0.5 text-[11px] font-bold text-[#1B64DA]">
+                                <Users size={12} />
+                                {org.followerCount.toLocaleString("ko-KR")} 팔로워
+                              </span>
+                            </div>
                             <p className="mt-1 text-[#6B7684] text-[13px] leading-snug">
                               {org.recommendation}
                             </p>
@@ -612,7 +623,7 @@ const App: React.FC = () => {
                           onClick={(event) => event.stopPropagation()}
                           className="flex items-center justify-center gap-1 rounded-[14px] bg-[#191F28] px-4 py-3 text-[14px] font-bold text-white"
                         >
-                          상세
+                          모창에서 보기
                           <ExternalLink size={14} />
                         </a>
                       </div>
@@ -645,7 +656,7 @@ const App: React.FC = () => {
 
         <div
           className={`fixed bottom-0 left-1/2 w-full max-w-md md:max-w-2xl -translate-x-1/2 bg-gradient-to-t from-[#F2F4F6] via-[#F2F4F6] to-transparent pt-10 pb-6 px-6 transition-transform duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
-            hasSelectedCategory && !isLoading ? "translate-y-0" : "translate-y-[150%]"
+            shouldShowResults && !isLoading ? "translate-y-0" : "translate-y-[150%]"
           }`}
         >
           <button
@@ -725,7 +736,13 @@ function OrganizationDetailSheet({
         </button>
 
         <div className="mb-5 pr-8">
-          <h2 className="text-2xl font-bold leading-8 text-[#191F28]">{org.name}</h2>
+          <div className="mb-1 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+            <h2 className="whitespace-normal break-keep text-2xl font-bold leading-8 text-[#191F28]">{org.name}</h2>
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-[6px] bg-[#E8F3FF] px-2.5 py-1 text-[12px] font-bold text-[#1B64DA]">
+              <Users size={14} />
+              {org.followerCount.toLocaleString("ko-KR")} 팔로워
+            </span>
+          </div>
           <p className="mt-2 text-[#8B95A1] text-[14px] leading-5">{org.recommendation}</p>
         </div>
 
@@ -833,7 +850,7 @@ function OrganizationDetailSheet({
           )}
         </div>
 
-        <div className="mt-6 grid grid-cols-[1fr_auto] gap-2">
+        <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto]">
           <button
             type="button"
             onClick={onToggleCompare}
@@ -851,7 +868,16 @@ function OrganizationDetailSheet({
             rel="noreferrer"
             className="flex justify-center items-center gap-2 rounded-[16px] bg-[#191F28] px-4 py-4 text-[16px] font-bold text-white"
           >
-            방문
+            홈페이지
+            <ExternalLink size={18} />
+          </a>
+          <a
+            href={org.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="flex justify-center items-center gap-2 rounded-[16px] bg-[#E8F3FF] px-4 py-4 text-[16px] font-bold text-[#1B64DA]"
+          >
+            모창에서 보기
             <ExternalLink size={18} />
           </a>
         </div>
@@ -989,12 +1015,12 @@ function CompareView({
                   {compareItems.map((org) => (
                     <td key={`link-${org.id}`} className="p-5">
                       <a
-                        href={org.website || org.sourceUrl}
+                        href={org.sourceUrl}
                         target="_blank"
                         rel="noreferrer"
                         className="flex w-full items-center justify-center gap-1.5 rounded-[12px] bg-[#3182F6] py-3 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-[#1B64DA]"
                       >
-                        방문하기 <ExternalLink size={14} />
+                        모창에서 보기 <ExternalLink size={14} />
                       </a>
                     </td>
                   ))}
