@@ -810,6 +810,9 @@ function CompareView({
   onOpenDetail: (org: SolutionOrg) => void;
 }) {
   const compareItems = items;
+  const labelColumnWidth = 112;
+  const orgColumnWidth = 248;
+  const tableWidth = labelColumnWidth + compareItems.length * orgColumnWidth;
   const rows = [
     { id: "popularity", label: "인기", value: (org: SolutionOrg) => `팔로워 ${org.followerCount.toLocaleString("ko-KR")}명` },
     { id: "tags", label: "제공 형태", value: (org: SolutionOrg) => compactTags(org.majorTags, 5).join(", ") },
@@ -845,18 +848,27 @@ function CompareView({
               <p className="mt-2 text-[14px] text-[#8B95A1]">업체 카드에서 비교 담기를 눌러보세요.</p>
             </div>
           ) : (
-            <table className="w-full min-w-[max-content] border-collapse text-left">
+            <table
+              className="table-fixed border-collapse text-left"
+              style={{ minWidth: tableWidth, width: tableWidth }}
+            >
+              <colgroup>
+                <col style={{ width: labelColumnWidth }} />
+                {compareItems.map((org) => (
+                  <col key={`col-${org.id}`} style={{ width: orgColumnWidth }} />
+                ))}
+              </colgroup>
               <thead>
                 <tr>
-                  <th className="sticky left-0 top-0 z-30 w-28 bg-white/95 p-4 align-bottom border-b border-r border-gray-100 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
+                  <th className="sticky left-0 top-0 z-30 bg-white/95 p-4 align-bottom border-b border-r border-gray-100 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
                     <span className="block text-[12px] font-medium text-[#8B95A1]">비교 항목</span>
                   </th>
                   {compareItems.map((org) => (
                     <th
                       key={`header-${org.id}`}
-                      className="sticky top-0 z-20 min-w-[220px] max-w-[260px] bg-white/95 p-5 align-top border-b border-gray-100 backdrop-blur"
+                      className="sticky top-0 z-20 bg-white/95 p-5 align-top border-b border-gray-100 backdrop-blur"
                     >
-                      <h3 className="mb-1 whitespace-normal text-[18px] font-bold leading-tight text-[#191F28]">{org.name}</h3>
+                      <h3 className="mb-1 line-clamp-2 h-12 whitespace-normal text-[18px] font-bold leading-6 text-[#191F28]">{org.name}</h3>
                       <p className="mb-3 line-clamp-2 h-10 whitespace-normal text-[13px] font-normal leading-snug text-[#6B7684]">{org.summary}</p>
                       <button
                         type="button"
@@ -878,7 +890,7 @@ function CompareView({
                     }`}
                   >
                     <td
-                      className={`sticky left-0 z-10 w-28 border-b border-r border-gray-100 p-4 shadow-[2px_0_5px_rgba(0,0,0,0.02)] ${
+                      className={`sticky left-0 z-10 border-b border-r border-gray-100 p-4 shadow-[2px_0_5px_rgba(0,0,0,0.02)] ${
                         row.id === "tech" ? "bg-[#FAFBFC]" : row.id === "deliverables" ? "bg-[#F5F8FF]" : "bg-white"
                       }`}
                     >
@@ -900,7 +912,7 @@ function CompareView({
                   </tr>
                 ))}
                 <tr>
-                  <td className="sticky left-0 z-10 w-28 border-r border-gray-100 bg-white p-4 shadow-[2px_0_5px_rgba(0,0,0,0.02)]" />
+                  <td className="sticky left-0 z-10 border-r border-gray-100 bg-white p-4 shadow-[2px_0_5px_rgba(0,0,0,0.02)]" />
                   {compareItems.map((org) => (
                     <td key={`link-${org.id}`} className="p-5">
                       <a
