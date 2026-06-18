@@ -6,6 +6,7 @@ import {
   CreditCard,
   ExternalLink,
   FileSpreadsheet,
+  Heart,
   Search,
   ThumbsUp,
   Users,
@@ -95,6 +96,18 @@ const SORT_OPTIONS = [
 ] as const;
 
 type SortOption = (typeof SORT_OPTIONS)[number]["id"];
+type LiveMetric = {
+  followerCount?: number;
+  likeCount?: number;
+};
+
+type SolutionListItem = SolutionOrg & {
+  organizationId: number;
+  organizationName: string;
+  organizationWebsite: string;
+  organizationSourceUrl: string;
+  solutionId: number;
+};
 
 function allTags(org: SolutionOrg) {
   return [
@@ -114,8 +127,10 @@ function matchesTag(org: SolutionOrg, tag: string) {
 function matchesQuery(org: SolutionOrg, query: string) {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return true;
+  const item = org as SolutionListItem;
   return [
     org.name,
+    item.organizationName,
     org.summary,
     org.description,
     org.recommendation,
@@ -159,7 +174,8 @@ function csvCell(value: string | number | null | undefined) {
 function downloadComparisonCsv(items: SolutionOrg[], filenamePrefix = "modoo-comparison") {
   const headers = ["비교 항목", ...items.map((org) => org.name)];
   const rows = [
-    ["업체 소개", ...items.map((org) => org.summary)],
+    ["제공 업체", ...items.map((org) => providerName(org))],
+    ["솔루션 소개", ...items.map((org) => org.summary)],
     ["인기", ...items.map((org) => `팔로워 ${org.followerCount.toLocaleString("ko-KR")}명`)],
     ["제공 형태", ...items.map((org) => compactTags(org.majorTags, 5).join(", "))],
     ["예상 비용", ...items.map((org) => org.priceText.join("\n") || "상세 확인 필요")],
@@ -179,7 +195,8 @@ function downloadComparisonCsv(items: SolutionOrg[], filenamePrefix = "modoo-com
     ],
     ["무료 혜택", ...items.map((org) => org.benefits.join("\n") || "등록된 무료 혜택 없음")],
     ["추천 대상", ...items.map((org) => org.recommendation)],
-    ["웹사이트", ...items.map((org) => org.website || org.sourceUrl)],
+    ["솔루션 웹사이트", ...items.map((org) => org.website || originalSourceUrl(org))],
+    ["모창 원본", ...items.map((org) => originalSourceUrl(org))],
     ["연락처", ...items.map((org) => org.contact)],
     ["이메일", ...items.map((org) => org.email)],
   ];
@@ -200,20 +217,118 @@ function downloadComparisonCsv(items: SolutionOrg[], filenamePrefix = "modoo-com
   URL.revokeObjectURL(url);
 }
 
+function applyLiveMetrics(org: SolutionOrg, metrics?: LiveMetric): SolutionOrg {
+  if (!metrics) return org;
+  return {
+    ...org,
+    followerCount: metrics.followerCount ?? org.followerCount,
+    likeCount: metrics.likeCount ?? org.likeCount,
+  };
+}
+
+function buildSolutionItems(orgs: SolutionOrg[]): SolutionListItem[] {
+  return orgs.flatMap((org) => {
+    const services = org.services.length > 0 ? org.services : [{
+      id: org.id,
+      name: org.name,
+      summary: org.summary,
+      website: org.website,
+      keywords: [],
+      priceText: org.priceText,
+      priceNumber: org.minPrice,
+      pricingKind: org.pricingKind,
+      benefits: org.benefits,
+      deliverables: org.deliverables,
+      majorTags: org.majorTags,
+      detailTags: org.detailTags,
+      techTags: org.techTags,
+      techEvidence: org.techEvidence,
+    }];
+
+    return services.map((service) => ({
+      ...org,
+      id: org.id * 100000 + service.id,
+      organizationId: org.id,
+      organizationName: org.name,
+      organizationWebsite: org.website,
+      organizationSourceUrl: org.sourceUrl,
+      solutionId: service.id,
+      name: service.name || org.name,
+      summary: service.summary || org.summary,
+      website: service.website || org.website,
+      serviceNames: [service.name || org.name],
+      majorTags: service.majorTags.length > 0 ? service.majorTags : org.majorTags,
+      detailTags: service.detailTags.length > 0 ? service.detailTags : org.detailTags,
+      techTags: service.techTags.length > 0 ? service.techTags : org.techTags,
+      techEvidence: service.techEvidence || org.techEvidence,
+      deliverables: service.deliverables.length > 0 ? service.deliverables : org.deliverables,
+      priceText: service.priceText.length > 0 ? service.priceText : org.priceText,
+      minPrice: service.priceNumber ?? org.minPrice,
+      pricingKind: service.pricingKind || org.pricingKind,
+      benefits: service.benefits.length > 0 ? service.benefits : org.benefits,
+      services: [service],
+    }));
+  });
+}
+
+function providerName(org: SolutionOrg) {
+  return (org as SolutionListItem).organizationName || org.name;
+}
+
+function originalSourceUrl(org: SolutionOrg) {
+  return (org as SolutionListItem).organizationSourceUrl || org.sourceUrl;
+}
+
+function originalWebsite(org: SolutionOrg) {
+  return (org as SolutionListItem).organizationWebsite || org.website || org.sourceUrl;
+}
+
+function loadStoredIds(key: string) {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) || "[]");
+    return Array.isArray(parsed)
+      ? parsed.filter((id) => Number.isInteger(id) && id > 0)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveStoredIds(key: string, ids: number[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(ids));
+  } catch {
+    // Storage can fail in private browsing; the in-memory state still works.
+  }
+}
+
 const App: React.FC = () => {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [compareIds, setCompareIds] = useState<number[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<number[]>(() =>
+    loadStoredIds("modoo-favorite-solution-ids"),
+  );
   const [isComparing, setIsComparing] = useState(false);
-  const [selectedOrg, setSelectedOrg] = useState<SolutionOrg | null>(null);
+  const [selectedOrg, setSelectedOrg] = useState<SolutionListItem | null>(null);
   const [sortOption, setSortOption] = useState<SortOption>("default");
   const [deadlineLabel, setDeadlineLabel] = useState(getSelectionDeadlineLabel);
+  const [liveMetrics, setLiveMetrics] = useState<Record<number, LiveMetric>>({});
 
   const hasSelectedCategory = selectedCategories.length > 0;
   const hasQuery = query.trim().length > 0;
   const shouldShowResults = hasSelectedCategory || hasQuery;
+
+  const organizations = useMemo(
+    () => SOLUTIONS.map((org) => applyLiveMetrics(org, liveMetrics[org.id])),
+    [liveMetrics],
+  );
+
+  const solutions = useMemo(() => buildSolutionItems(organizations), [organizations]);
 
   const secondaryTags = useMemo(
     () =>
@@ -228,7 +343,7 @@ const App: React.FC = () => {
   );
 
   const filteredSolutions = useMemo(() => {
-    const filtered = SOLUTIONS.filter((org) => {
+    const filtered = solutions.filter((org) => {
       if (!matchesQuery(org, query)) return false;
       if (
         hasSelectedCategory &&
@@ -255,13 +370,13 @@ const App: React.FC = () => {
       }
       return b.likeCount + b.followerCount - (a.likeCount + a.followerCount);
     });
-  }, [hasSelectedCategory, query, selectedCategories, selectedTags, sortOption]);
+  }, [hasSelectedCategory, query, selectedCategories, selectedTags, solutions, sortOption]);
 
   const tagCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     secondaryTags.forEach((tag) => {
       const nextTags = selectedTags.includes(tag) ? selectedTags : [...selectedTags, tag];
-      counts[tag] = SOLUTIONS.filter((org) => {
+      counts[tag] = solutions.filter((org) => {
         if (!matchesQuery(org, query)) return false;
         if (
           hasSelectedCategory &&
@@ -273,28 +388,68 @@ const App: React.FC = () => {
       }).length;
     });
     return counts;
-  }, [hasSelectedCategory, query, secondaryTags, selectedCategories, selectedTags]);
+  }, [hasSelectedCategory, query, secondaryTags, selectedCategories, selectedTags, solutions]);
 
   useEffect(() => {
     setCompareIds((prev) => prev.filter((id) => filteredSolutions.some((org) => org.id === id)));
   }, [filteredSolutions]);
 
   useEffect(() => {
+    setFavoriteIds((prev) => prev.filter((id) => solutions.some((org) => org.id === id)));
+  }, [solutions]);
+
+  useEffect(() => {
+    saveStoredIds("modoo-favorite-solution-ids", favoriteIds);
+  }, [favoriteIds]);
+
+  useEffect(() => {
     setSelectedTags((prev) => prev.filter((tag) => secondaryTags.includes(tag)));
   }, [secondaryTags]);
 
   const comparedSolutions = useMemo(
-    () => SOLUTIONS.filter((org) => compareIds.includes(org.id)),
-    [compareIds],
+    () => solutions.filter((org) => compareIds.includes(org.id)),
+    [compareIds, solutions],
   );
 
-  const compareItems = comparedSolutions.length > 0 ? comparedSolutions : filteredSolutions;
+  const favoriteSolutions = useMemo(
+    () => solutions.filter((org) => favoriteIds.includes(org.id)),
+    [favoriteIds, solutions],
+  );
+
+  const compareItems =
+    comparedSolutions.length > 0
+      ? comparedSolutions
+      : favoriteSolutions.length > 0
+        ? favoriteSolutions
+        : filteredSolutions;
 
   useEffect(() => {
     const timer = window.setInterval(() => {
       setDeadlineLabel(getSelectionDeadlineLabel());
     }, 1000 * 60 * 30);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const ids = SOLUTIONS.map((org) => org.id).join(",");
+
+    fetch(`/api/followers?ids=${ids}`, { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { followers?: Record<string, LiveMetric> } | null) => {
+        if (!payload?.followers) return;
+        const nextMetrics = Object.fromEntries(
+          Object.entries(payload.followers).map(([id, metric]) => [Number(id), metric]),
+        );
+        setLiveMetrics(nextMetrics);
+      })
+      .catch((error) => {
+        if (error?.name !== "AbortError") {
+          console.warn("최신 팔로워 수를 가져오지 못했습니다.", error);
+        }
+      });
+
+    return () => controller.abort();
   }, []);
 
   const handleCategorySelect = (categoryId: string) => {
@@ -323,6 +478,17 @@ const App: React.FC = () => {
     });
   };
 
+  const toggleFavorite = (id: number) => {
+    setFavoriteIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    );
+  };
+
+  const openFavoriteCompare = () => {
+    setCompareIds([]);
+    setIsComparing(true);
+  };
+
   const resetAll = () => {
     setSelectedCategories([]);
     setSelectedTags([]);
@@ -347,11 +513,28 @@ const App: React.FC = () => {
               </div>
               <h1 className="text-2xl font-bold leading-tight">
                 원하는 태그로 <br />
-                <span className="text-[#3182F6]">AI 솔루션 업체</span> 찾기
+                <span className="text-[#3182F6]">AI 솔루션</span> 찾기
               </h1>
               <p className="mt-2 text-[#8B95A1] text-sm">
-                목적은 여러 개 선택할 수 있어요. 필요한 태그를 눌러 후보를 좁혀보세요.
+                목적은 여러 개 선택할 수 있어요. 필요한 태그를 눌러 솔루션 후보를 좁혀보세요.
               </p>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-[12px] font-bold text-[#4E5968] shadow-sm border border-gray-100">
+                  <span className="text-[#3182F6]">전체 {solutions.length.toLocaleString("ko-KR")}개</span>
+                  <span className="h-3 w-px bg-[#E5E8EB]" />
+                  <span>솔루션 기준으로 비교</span>
+                </div>
+                {favoriteIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={openFavoriteCompare}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-[#FFE5EB] px-3 py-2 text-[12px] font-bold text-[#F04452] shadow-sm border border-[#F04452]/10"
+                  >
+                    <Heart size={14} className="fill-current" />
+                    찜한 {favoriteIds.length}개 비교
+                  </button>
+                )}
+              </div>
             </div>
             {(hasSelectedCategory || selectedTags.length > 0 || query) && (
               <button
@@ -369,7 +552,7 @@ const App: React.FC = () => {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="업체명, 서비스명, 키워드 검색"
+              placeholder="솔루션명, 업체명, 키워드 검색"
               className="w-full bg-transparent text-[15px] outline-none placeholder:text-[#B0B8C1]"
             />
             {query && (
@@ -389,7 +572,7 @@ const App: React.FC = () => {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {PRIMARY_CATEGORIES.map((category) => {
               const isSelected = selectedCategories.includes(category.id);
-              const count = SOLUTIONS.filter((org) => org.majorTags.includes(category.id)).length;
+              const count = solutions.filter((org) => org.majorTags.includes(category.id)).length;
               return (
                 <button
                   key={category.id}
@@ -409,7 +592,7 @@ const App: React.FC = () => {
                     {category.label}
                   </span>
                   <span className="mt-2 text-[12px] font-bold text-[#8B95A1]">
-                    {count}개 업체
+                    {count}개 솔루션
                   </span>
                 </button>
               );
@@ -432,7 +615,7 @@ const App: React.FC = () => {
                     더 필요한 조건이 있나요?
                   </h3>
                   <p className="mt-1 text-[13px] text-[#8B95A1]">
-                    선택한 목적 중 하나에 맞는 업체에서, 아래 조건을 모두 만족하는 업체만 보여줘요.
+                    선택한 목적 중 하나에 맞는 솔루션 중, 아래 조건을 모두 만족하는 것만 보여줘요.
                   </p>
                 </div>
                 <span className="shrink-0 whitespace-nowrap rounded-full bg-[#E8F3FF] px-3 py-1.5 text-[13px] font-bold text-[#3182F6]">
@@ -480,9 +663,22 @@ const App: React.FC = () => {
           <section className="px-6 md:px-10 mt-8">
             <div className="mb-4 flex items-end justify-between gap-3">
               <h3 className="text-[17px] font-bold text-[#333D4B]">
-                추천 업체 <span className="text-[#3182F6]">{filteredSolutions.length}</span>
+                추천 솔루션 <span className="text-[#3182F6]">{filteredSolutions.length}</span>
+                <span className="ml-1 text-[12px] font-bold text-[#8B95A1]">
+                  / 전체 {solutions.length.toLocaleString("ko-KR")}개
+                </span>
               </h3>
               <div className="flex shrink-0 items-center gap-2">
+                {favoriteIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={openFavoriteCompare}
+                    className="flex items-center gap-1.5 rounded-full border border-[#F04452]/15 bg-[#FFE5EB] px-3 py-2 text-[12px] font-bold text-[#F04452] shadow-sm outline-none transition-colors hover:bg-[#FFD6DF]"
+                  >
+                    <Heart size={14} className="fill-current" />
+                    찜한 {favoriteIds.length}개 비교
+                  </button>
+                )}
                 <button
                   type="button"
                   disabled={filteredSolutions.length === 0}
@@ -517,7 +713,7 @@ const App: React.FC = () => {
                 <div className="bg-white rounded-[24px] p-8 text-center flex flex-col items-center justify-center border border-gray-100">
                   <span className="text-3xl mb-3">🤔</span>
                   <p className="text-[#333D4B] font-bold text-[16px]">
-                    조건에 딱 맞는 업체가 없어요
+                    조건에 딱 맞는 솔루션이 없어요
                   </p>
                   <p className="text-[#8B95A1] text-[14px] mt-1">
                     선택한 태그를 조금 줄여보세요.
@@ -526,6 +722,7 @@ const App: React.FC = () => {
               ) : (
                 filteredSolutions.slice(0, 120).map((org) => {
                   const isCompared = compareIds.includes(org.id);
+                  const isFavorite = favoriteIds.includes(org.id);
                   const matchedTags = [
                     ...selectedCategories.filter((category) => org.majorTags.includes(category)),
                     ...selectedTags.filter((tag) => matchesTag(org, tag)),
@@ -553,7 +750,7 @@ const App: React.FC = () => {
                             )}
                           </div>
                           <div className="min-w-0">
-                            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
                               <h4 className="whitespace-normal break-keep text-[18px] font-bold text-[#191F28] leading-6">
                                 {org.name}
                               </h4>
@@ -561,6 +758,21 @@ const App: React.FC = () => {
                                 <Users size={12} />
                                 {org.followerCount.toLocaleString("ko-KR")} 팔로워
                               </span>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  toggleFavorite(org.id);
+                                }}
+                                aria-label={isFavorite ? "찜 해제" : "찜하기"}
+                                className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full transition-colors ${
+                                  isFavorite
+                                    ? "bg-[#FFE5EB] text-[#F04452]"
+                                    : "bg-[#F2F4F6] text-[#8B95A1] hover:bg-[#FFE5EB] hover:text-[#F04452]"
+                                }`}
+                              >
+                                <Heart size={15} className={isFavorite ? "fill-current" : ""} />
+                              </button>
                             </div>
                             <p className="mt-1 text-[#6B7684] text-[13px] leading-snug">
                               {org.recommendation}
@@ -617,7 +829,7 @@ const App: React.FC = () => {
                           {isCompared ? "비교함에 담김" : "비교 담기"}
                         </button>
                         <a
-                          href={org.sourceUrl}
+                          href={originalSourceUrl(org)}
                           target="_blank"
                           rel="noreferrer"
                           onClick={(event) => event.stopPropagation()}
@@ -656,24 +868,28 @@ const App: React.FC = () => {
 
         <div
           className={`fixed bottom-0 left-1/2 w-full max-w-md md:max-w-2xl -translate-x-1/2 bg-gradient-to-t from-[#F2F4F6] via-[#F2F4F6] to-transparent pt-10 pb-6 px-6 transition-transform duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
-            shouldShowResults && !isLoading ? "translate-y-0" : "translate-y-[150%]"
+            (shouldShowResults || favoriteIds.length > 0) && !isLoading
+              ? "translate-y-0"
+              : "translate-y-[150%]"
           }`}
         >
           <button
-            disabled={filteredSolutions.length === 0}
+            disabled={compareItems.length === 0}
             onClick={() => {
               setIsComparing(true);
             }}
             className={`w-full py-4 rounded-[16px] text-[17px] font-bold transition-colors shadow-lg flex items-center justify-center gap-2 ${
-              filteredSolutions.length === 0
+              compareItems.length === 0
                 ? "bg-[#D1D6DB] text-white cursor-not-allowed shadow-none"
                 : "bg-[#3182F6] text-white hover:bg-[#1B64DA] active:bg-[#1953B3]"
             }`}
           >
             <CheckCircle2 size={20} />
             {compareIds.length > 0
-              ? `선택한 ${compareIds.length}개 업체 비교하기`
-              : `${filteredSolutions.length}개 업체 한눈에 비교하기`}
+              ? `선택한 ${compareIds.length}개 솔루션 비교하기`
+              : favoriteIds.length > 0
+                ? `찜한 ${favoriteIds.length}개 솔루션 비교하기`
+              : `${filteredSolutions.length}개 솔루션 한눈에 비교하기`}
           </button>
         </div>
 
@@ -692,8 +908,10 @@ const App: React.FC = () => {
           <OrganizationDetailSheet
             org={selectedOrg}
             isCompared={compareIds.includes(selectedOrg.id)}
+            isFavorite={favoriteIds.includes(selectedOrg.id)}
             onClose={() => setSelectedOrg(null)}
             onToggleCompare={() => toggleCompare(selectedOrg.id)}
+            onToggleFavorite={() => toggleFavorite(selectedOrg.id)}
           />
         )}
       </main>
@@ -713,13 +931,17 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 function OrganizationDetailSheet({
   org,
   isCompared,
+  isFavorite,
   onClose,
   onToggleCompare,
+  onToggleFavorite,
 }: {
-  org: SolutionOrg;
+  org: SolutionListItem;
   isCompared: boolean;
+  isFavorite: boolean;
   onClose: () => void;
   onToggleCompare: () => void;
+  onToggleFavorite: () => void;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex justify-center items-end md:items-center">
@@ -743,6 +965,7 @@ function OrganizationDetailSheet({
               {org.followerCount.toLocaleString("ko-KR")} 팔로워
             </span>
           </div>
+          <p className="mt-1 text-[13px] font-bold text-[#3182F6]">제공 업체: {providerName(org)}</p>
           <p className="mt-2 text-[#8B95A1] text-[14px] leading-5">{org.recommendation}</p>
         </div>
 
@@ -850,11 +1073,11 @@ function OrganizationDetailSheet({
           )}
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto]">
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
             onClick={onToggleCompare}
-            className={`rounded-[16px] py-4 text-[16px] font-bold transition-colors ${
+            className={`min-w-0 flex-1 rounded-[16px] py-4 text-[16px] font-bold transition-colors ${
               isCompared
                 ? "bg-[#E8F3FF] text-[#1B64DA]"
                 : "bg-[#3182F6] hover:bg-[#1B64DA] active:bg-[#1953B3] text-white"
@@ -862,20 +1085,33 @@ function OrganizationDetailSheet({
           >
             {isCompared ? "비교함에서 제거" : "비교 담기"}
           </button>
+          <button
+            type="button"
+            onClick={onToggleFavorite}
+            aria-label={isFavorite ? "찜 해제" : "찜하기"}
+            title={isFavorite ? "찜 해제" : "찜하기"}
+            className={`flex h-[52px] shrink-0 items-center justify-center rounded-[16px] text-[16px] font-bold transition-colors sm:w-[52px] ${
+              isFavorite
+                ? "bg-[#FFE5EB] text-[#F04452]"
+                : "bg-[#F2F4F6] text-[#333D4B] hover:bg-[#FFE5EB] hover:text-[#F04452]"
+            }`}
+          >
+            <Heart size={20} className={isFavorite ? "fill-current" : ""} />
+          </button>
           <a
-            href={org.website || org.sourceUrl}
+            href={org.website || originalWebsite(org)}
             target="_blank"
             rel="noreferrer"
-            className="flex justify-center items-center gap-2 rounded-[16px] bg-[#191F28] px-4 py-4 text-[16px] font-bold text-white"
+            className="flex shrink-0 justify-center items-center gap-2 rounded-[16px] bg-[#191F28] px-4 py-4 text-[16px] font-bold text-white"
           >
-            홈페이지
+            솔루션 페이지
             <ExternalLink size={18} />
           </a>
           <a
-            href={org.sourceUrl}
+            href={originalSourceUrl(org)}
             target="_blank"
             rel="noreferrer"
-            className="flex justify-center items-center gap-2 rounded-[16px] bg-[#E8F3FF] px-4 py-4 text-[16px] font-bold text-[#1B64DA]"
+            className="flex shrink-0 justify-center items-center gap-2 rounded-[16px] bg-[#E8F3FF] px-4 py-4 text-[16px] font-bold text-[#1B64DA]"
           >
             모창에서 보기
             <ExternalLink size={18} />
@@ -894,9 +1130,9 @@ function CompareView({
   onDownload,
 }: {
   isOpen: boolean;
-  items: SolutionOrg[];
+  items: SolutionListItem[];
   onBack: () => void;
-  onOpenDetail: (org: SolutionOrg) => void;
+  onOpenDetail: (org: SolutionListItem) => void;
   onDownload: () => void;
 }) {
   const compareItems = items;
@@ -904,13 +1140,14 @@ function CompareView({
   const orgColumnWidth = 248;
   const tableWidth = labelColumnWidth + compareItems.length * orgColumnWidth;
   const rows = [
-    { id: "popularity", label: "인기", value: (org: SolutionOrg) => `팔로워 ${org.followerCount.toLocaleString("ko-KR")}명` },
-    { id: "tags", label: "제공 형태", value: (org: SolutionOrg) => compactTags(org.majorTags, 5).join(", ") },
-    { id: "price", label: "예상 비용", value: (org: SolutionOrg) => org.priceText[0] || "상세 확인 필요" },
-    { id: "tech", label: "기술 방식", value: (org: SolutionOrg) => compactTags(org.techTags, 6).join(", ") || "확인필요" },
-    { id: "deliverables", label: "결과물", value: (org: SolutionOrg) => compactTags(org.deliverables, 6).join(", ") || "상세 확인 필요" },
-    { id: "features", label: "상세 특징", value: (org: SolutionOrg) => compactTags(org.services.map((service) => [service.name, service.summary].filter(Boolean).join(": ")), 3).join("\n") },
-    { id: "benefits", label: "무료 혜택", value: (org: SolutionOrg) => org.benefits[0] || "등록된 무료 혜택 없음" },
+    { id: "provider", label: "제공 업체", value: (org: SolutionListItem) => providerName(org) },
+    { id: "popularity", label: "인기", value: (org: SolutionListItem) => `팔로워 ${org.followerCount.toLocaleString("ko-KR")}명` },
+    { id: "tags", label: "제공 형태", value: (org: SolutionListItem) => compactTags(org.majorTags, 5).join(", ") },
+    { id: "price", label: "예상 비용", value: (org: SolutionListItem) => org.priceText[0] || "상세 확인 필요" },
+    { id: "tech", label: "기술 방식", value: (org: SolutionListItem) => compactTags(org.techTags, 6).join(", ") || "확인필요" },
+    { id: "deliverables", label: "결과물", value: (org: SolutionListItem) => compactTags(org.deliverables, 6).join(", ") || "상세 확인 필요" },
+    { id: "features", label: "상세 특징", value: (org: SolutionListItem) => compactTags(org.services.map((service) => [service.name, service.summary].filter(Boolean).join(": ")), 3).join("\n") },
+    { id: "benefits", label: "무료 혜택", value: (org: SolutionListItem) => org.benefits[0] || "등록된 무료 혜택 없음" },
   ];
 
   return (
@@ -926,8 +1163,8 @@ function CompareView({
             <ChevronLeft size={26} />
           </button>
           <div>
-            <h2 className="text-[20px] font-bold text-[#191F28]">업체 상세 비교</h2>
-            <p className="mt-0.5 text-[13px] text-[#8B95A1]">{compareItems.length}개 업체를 항목별로 비교합니다.</p>
+            <h2 className="text-[20px] font-bold text-[#191F28]">솔루션 상세 비교</h2>
+            <p className="mt-0.5 text-[13px] text-[#8B95A1]">{compareItems.length}개 솔루션을 항목별로 비교합니다.</p>
           </div>
           <button
             type="button"
@@ -943,8 +1180,8 @@ function CompareView({
         <div className="flex-1 overflow-x-auto overflow-y-auto bg-white pb-10">
           {compareItems.length === 0 ? (
             <div className="m-6 rounded-[24px] bg-[#F2F4F6] p-8 text-center">
-              <p className="text-[16px] font-bold text-[#333D4B]">비교할 업체가 없습니다</p>
-              <p className="mt-2 text-[14px] text-[#8B95A1]">업체 카드에서 비교 담기를 눌러보세요.</p>
+              <p className="text-[16px] font-bold text-[#333D4B]">비교할 솔루션이 없습니다</p>
+              <p className="mt-2 text-[14px] text-[#8B95A1]">솔루션 카드에서 비교 담기를 눌러보세요.</p>
             </div>
           ) : (
             <table
@@ -968,6 +1205,7 @@ function CompareView({
                       className="sticky top-0 z-20 bg-white/95 p-5 align-top border-b border-gray-100 backdrop-blur"
                     >
                       <h3 className="mb-3 line-clamp-2 h-12 whitespace-normal text-[18px] font-bold leading-6 text-[#191F28]">{org.name}</h3>
+                      <p className="mb-2 text-[12px] font-bold text-[#3182F6]">{providerName(org)}</p>
                       <button
                         type="button"
                         onClick={() => onOpenDetail(org)}
@@ -1015,7 +1253,7 @@ function CompareView({
                   {compareItems.map((org) => (
                     <td key={`link-${org.id}`} className="p-5">
                       <a
-                        href={org.sourceUrl}
+                        href={originalSourceUrl(org)}
                         target="_blank"
                         rel="noreferrer"
                         className="flex w-full items-center justify-center gap-1.5 rounded-[12px] bg-[#3182F6] py-3 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-[#1B64DA]"
