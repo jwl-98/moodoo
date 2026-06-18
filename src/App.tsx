@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   CreditCard,
   ExternalLink,
+  FileSpreadsheet,
   Search,
   ThumbsUp,
   X,
@@ -147,6 +148,55 @@ function getSelectionDeadlineLabel() {
   if (diffDays > 0) return `D-${diffDays}`;
   if (diffDays === 0) return "D-Day";
   return `D+${Math.abs(diffDays)}`;
+}
+
+function csvCell(value: string | number | null | undefined) {
+  const text = String(value ?? "");
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function downloadComparisonCsv(items: SolutionOrg[], filenamePrefix = "modoo-comparison") {
+  const headers = ["비교 항목", ...items.map((org) => org.name)];
+  const rows = [
+    ["업체 소개", ...items.map((org) => org.summary)],
+    ["인기", ...items.map((org) => `팔로워 ${org.followerCount.toLocaleString("ko-KR")}명`)],
+    ["제공 형태", ...items.map((org) => compactTags(org.majorTags, 5).join(", "))],
+    ["예상 비용", ...items.map((org) => org.priceText.join("\n") || "상세 확인 필요")],
+    ["기술 방식", ...items.map((org) => compactTags(org.techTags, 6).join(", ") || "확인필요")],
+    ["기술 근거", ...items.map((org) => org.techEvidence || "확인필요")],
+    ["결과물", ...items.map((org) => compactTags(org.deliverables, 6).join(", ") || "상세 확인 필요")],
+    [
+      "상세 특징",
+      ...items.map((org) =>
+        compactTags(
+          org.services.map((service) =>
+            [service.name, service.summary].filter(Boolean).join(": "),
+          ),
+          3,
+        ).join("\n"),
+      ),
+    ],
+    ["무료 혜택", ...items.map((org) => org.benefits.join("\n") || "등록된 무료 혜택 없음")],
+    ["추천 대상", ...items.map((org) => org.recommendation)],
+    ["웹사이트", ...items.map((org) => org.website || org.sourceUrl)],
+    ["연락처", ...items.map((org) => org.contact)],
+    ["이메일", ...items.map((org) => org.email)],
+  ];
+
+  const csv = [headers, ...rows]
+    .map((row) => row.map(csvCell).join(","))
+    .join("\r\n");
+  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const date = new Date().toISOString().slice(0, 10);
+
+  link.href = url;
+  link.download = `${filenamePrefix}-${date}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 const App: React.FC = () => {
@@ -427,23 +477,34 @@ const App: React.FC = () => {
               <h3 className="text-[17px] font-bold text-[#333D4B]">
                 추천 업체 <span className="text-[#3182F6]">{filteredSolutions.length}</span>
               </h3>
-              <label className="relative shrink-0">
-                <span className="sr-only">정렬</span>
-                <select
-                  value={sortOption}
-                  onChange={(event) => setSortOption(event.target.value as SortOption)}
-                  className="appearance-none rounded-full border border-gray-200 bg-white py-2 pl-3 pr-8 text-[12px] font-bold text-[#333D4B] outline-none"
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  disabled={filteredSolutions.length === 0}
+                  onClick={() => downloadComparisonCsv(filteredSolutions, "modoo-filtered-comparison")}
+                  className="flex items-center gap-1.5 rounded-full border border-[#107C41]/20 bg-[#107C41] px-3 py-2 text-[12px] font-bold text-white shadow-sm outline-none transition-colors hover:bg-[#0E6F3A] disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-white disabled:text-[#B0B8C1]"
                 >
-                  {SORT_OPTIONS.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-[#8B95A1]">
-                  ▼
-                </span>
-              </label>
+                  <FileSpreadsheet size={14} />
+                  엑셀
+                </button>
+                <label className="relative">
+                  <span className="sr-only">정렬</span>
+                  <select
+                    value={sortOption}
+                    onChange={(event) => setSortOption(event.target.value as SortOption)}
+                    className="appearance-none rounded-full border border-gray-200 bg-white py-2 pl-3 pr-8 text-[12px] font-bold text-[#333D4B] outline-none"
+                  >
+                    {SORT_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-[#8B95A1]">
+                    ▼
+                  </span>
+                </label>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -613,6 +674,7 @@ const App: React.FC = () => {
             setSelectedOrg(org);
             setIsComparing(false);
           }}
+          onDownload={() => downloadComparisonCsv(compareItems, "modoo-comparison")}
         />
 
         {selectedOrg && (
@@ -803,11 +865,13 @@ function CompareView({
   items,
   onBack,
   onOpenDetail,
+  onDownload,
 }: {
   isOpen: boolean;
   items: SolutionOrg[];
   onBack: () => void;
   onOpenDetail: (org: SolutionOrg) => void;
+  onDownload: () => void;
 }) {
   const compareItems = items;
   const labelColumnWidth = 112;
@@ -839,6 +903,15 @@ function CompareView({
             <h2 className="text-[20px] font-bold text-[#191F28]">업체 상세 비교</h2>
             <p className="mt-0.5 text-[13px] text-[#8B95A1]">{compareItems.length}개 업체를 항목별로 비교합니다.</p>
           </div>
+          <button
+            type="button"
+            disabled={compareItems.length === 0}
+            onClick={onDownload}
+            className="ml-auto flex items-center gap-1.5 rounded-full border border-[#107C41]/20 bg-[#107C41] px-3 py-2 text-[12px] font-bold text-white shadow-sm transition-colors hover:bg-[#0E6F3A] disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-white disabled:text-[#B0B8C1]"
+          >
+            <FileSpreadsheet size={14} />
+            엑셀
+          </button>
         </header>
 
         <div className="flex-1 overflow-x-auto overflow-y-auto bg-white pb-10">
@@ -868,15 +941,15 @@ function CompareView({
                       key={`header-${org.id}`}
                       className="sticky top-0 z-20 bg-white/95 p-5 align-top border-b border-gray-100 backdrop-blur"
                     >
-                      <h3 className="mb-1 line-clamp-2 h-12 whitespace-normal text-[18px] font-bold leading-6 text-[#191F28]">{org.name}</h3>
-                      <p className="mb-3 line-clamp-2 h-10 whitespace-normal text-[13px] font-normal leading-snug text-[#6B7684]">{org.summary}</p>
+                      <h3 className="mb-3 line-clamp-2 h-12 whitespace-normal text-[18px] font-bold leading-6 text-[#191F28]">{org.name}</h3>
                       <button
                         type="button"
                         onClick={() => onOpenDetail(org)}
-                        className="w-full rounded-[8px] bg-[#F2F4F6] py-2 text-[13px] font-bold text-[#4E5968] transition-colors hover:bg-gray-200"
+                        className="mb-3 w-full rounded-[8px] bg-[#F2F4F6] py-2 text-[13px] font-bold text-[#4E5968] transition-colors hover:bg-gray-200"
                       >
                         자세히 보기
                       </button>
+                      <p className="whitespace-normal break-keep text-[13px] font-normal leading-snug text-[#6B7684]">{org.summary}</p>
                     </th>
                   ))}
                 </tr>
