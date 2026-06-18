@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft,
   Check,
   CheckCircle2,
+  ChevronLeft,
   CreditCard,
   ExternalLink,
   Search,
@@ -810,141 +810,115 @@ function CompareView({
   onOpenDetail: (org: SolutionOrg) => void;
 }) {
   const compareItems = items;
+  const rows = [
+    { id: "popularity", label: "인기", value: (org: SolutionOrg) => `팔로워 ${org.followerCount.toLocaleString("ko-KR")}명` },
+    { id: "tags", label: "제공 형태", value: (org: SolutionOrg) => compactTags(org.majorTags, 5).join(", ") },
+    { id: "price", label: "예상 비용", value: (org: SolutionOrg) => org.priceText[0] || "상세 확인 필요" },
+    { id: "tech", label: "기술 방식", value: (org: SolutionOrg) => compactTags(org.techTags, 6).join(", ") || "확인필요" },
+    { id: "deliverables", label: "결과물", value: (org: SolutionOrg) => compactTags(org.deliverables, 6).join(", ") || "상세 확인 필요" },
+    { id: "features", label: "상세 특징", value: (org: SolutionOrg) => compactTags(org.services.map((service) => [service.name, service.summary].filter(Boolean).join(": ")), 3).join("\n") },
+    { id: "benefits", label: "무료 혜택", value: (org: SolutionOrg) => org.benefits[0] || "등록된 무료 혜택 없음" },
+  ];
 
   return (
-    <div
-      className={`fixed inset-0 z-40 bg-[#F2F4F6] transition-transform duration-300 ${
-        isOpen ? "translate-x-0 animate-slide-left" : "translate-x-full"
-      }`}
-    >
-      <div className="flex h-full flex-col bg-[#F2F4F6]">
-        <header className="shrink-0 flex items-center border-b border-gray-100 bg-white px-4 py-4 md:px-8 md:py-5 z-20">
+    <div className={`fixed inset-0 z-40 bg-white transition-transform duration-300 ${isOpen ? "translate-x-0" : "translate-x-full"}`}>
+      <div className="flex h-full flex-col bg-white">
+        <header className="shrink-0 px-5 md:px-8 pt-10 pb-4 flex items-center bg-white border-b border-gray-100 z-40">
           <button
             type="button"
             onClick={onBack}
-            className="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 -ml-2 mr-2 text-[#4E5968] hover:bg-gray-100 rounded-full transition-colors"
             aria-label="비교 화면 닫기"
           >
-            <ArrowLeft size={24} />
+            <ChevronLeft size={26} />
           </button>
-          <h2 className="ml-2 text-[18px] font-bold text-[#191F28]">선택한 업체 비교</h2>
-          <span className="ml-auto rounded-full bg-[#E8F3FF] px-3 py-1 text-[12px] font-bold text-[#3182F6]">
-            {compareItems.length}개
-          </span>
+          <div>
+            <h2 className="text-[20px] font-bold text-[#191F28]">업체 상세 비교</h2>
+            <p className="mt-0.5 text-[13px] text-[#8B95A1]">{compareItems.length}개 업체를 항목별로 비교합니다.</p>
+          </div>
         </header>
 
-        <div className="flex-1 overflow-x-auto overflow-y-auto scrollbar-hide bg-[#F2F4F6]">
+        <div className="flex-1 overflow-x-auto overflow-y-auto bg-white pb-10">
           {compareItems.length === 0 ? (
-            <div className="m-6 rounded-[24px] bg-white p-8 text-center">
+            <div className="m-6 rounded-[24px] bg-[#F2F4F6] p-8 text-center">
               <p className="text-[16px] font-bold text-[#333D4B]">비교할 업체가 없습니다</p>
               <p className="mt-2 text-[14px] text-[#8B95A1]">업체 카드에서 비교 담기를 눌러보세요.</p>
             </div>
           ) : (
-            <div className="flex w-max min-w-full gap-4 p-4 md:p-8">
-              {compareItems.map((org) => (
-                <article
-                  key={org.id}
-                  className="flex w-[280px] md:w-[320px] flex-shrink-0 flex-col overflow-hidden rounded-[20px] border border-gray-100 bg-white shadow-sm"
-                >
-                  <div className="sticky top-0 z-10 border-b border-gray-100 bg-white p-5">
-                    <div className="mb-3 flex items-center gap-3">
-                      <div className="h-11 w-11 shrink-0 overflow-hidden rounded-2xl bg-[#F2F4F6] border border-gray-100 flex items-center justify-center">
-                        {org.logo ? (
-                          <img src={org.logo} alt="" loading="lazy" className="h-full w-full object-cover" />
-                        ) : (
-                          <span className="text-[13px] font-bold text-[#6B7684]">{initials(org.name)}</span>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className="truncate text-[20px] font-bold text-[#191F28]">{org.name}</h3>
-                        <p className="mt-1 text-[12px] font-bold text-[#8B95A1]">
-                          팔로워 {org.followerCount.toLocaleString("ko-KR")}명
-                        </p>
-                      </div>
-                    </div>
-                    <p className="line-clamp-2 text-[13px] leading-snug text-[#6B7684]">{org.summary}</p>
-                  </div>
-
-                  <div className="space-y-6 p-5">
-                    <CompareCardSection
-                      label="핵심 기술"
-                      value={compactTags(org.techTags, 7).join(", ") || "확인필요"}
-                    />
-                    <CompareCardSection
-                      label="제공 형태"
-                      tags={compactTags([...org.majorTags, ...org.detailTags], 7)}
-                    />
-                    <CompareCardSection
-                      label="예상 비용"
-                      value={org.priceText[0] || "상세 확인 필요"}
-                      accent
-                    />
-                    <div className="rounded-[12px] bg-[#F9FAFB] p-3">
-                      <span className="mb-1 block text-[12px] font-bold text-[#8B95A1]">
-                        추천 대상
-                      </span>
-                      <p className="text-[13px] leading-relaxed text-[#4E5968]">{org.recommendation}</p>
-                    </div>
-                    <CompareCardSection
-                      label="제공받는 결과물"
-                      value={compactTags(org.deliverables, 6).join(", ") || "상세 확인 필요"}
-                    />
-                    <CompareCardSection
-                      label="무료 혜택"
-                      value={org.benefits[0] || "등록된 무료 혜택 없음"}
-                    />
-                  </div>
-
-                  <div className="mt-auto border-t border-gray-50 p-4">
-                    <button
-                      type="button"
-                      onClick={() => onOpenDetail(org)}
-                      className="w-full rounded-[12px] bg-[#E8F3FF] py-3 text-[14px] font-bold text-[#1B64DA] transition-colors hover:bg-[#D0E6FF]"
+            <table className="w-full min-w-[max-content] border-collapse text-left">
+              <thead>
+                <tr>
+                  <th className="sticky left-0 top-0 z-30 w-28 bg-white/95 p-4 align-bottom border-b border-r border-gray-100 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
+                    <span className="block text-[12px] font-medium text-[#8B95A1]">비교 항목</span>
+                  </th>
+                  {compareItems.map((org) => (
+                    <th
+                      key={`header-${org.id}`}
+                      className="sticky top-0 z-20 min-w-[220px] max-w-[260px] bg-white/95 p-5 align-top border-b border-gray-100 backdrop-blur"
                     >
-                      상세 보기
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
+                      <h3 className="mb-1 whitespace-normal text-[18px] font-bold leading-tight text-[#191F28]">{org.name}</h3>
+                      <p className="mb-3 line-clamp-2 h-10 whitespace-normal text-[13px] font-normal leading-snug text-[#6B7684]">{org.summary}</p>
+                      <button
+                        type="button"
+                        onClick={() => onOpenDetail(org)}
+                        className="w-full rounded-[8px] bg-[#F2F4F6] py-2 text-[13px] font-bold text-[#4E5968] transition-colors hover:bg-gray-200"
+                      >
+                        자세히 보기
+                      </button>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className={`transition-colors hover:bg-gray-50/50 ${
+                      row.id === "tech" ? "bg-[#FAFBFC]" : row.id === "deliverables" ? "bg-[#F5F8FF]" : ""
+                    }`}
+                  >
+                    <td
+                      className={`sticky left-0 z-10 w-28 border-b border-r border-gray-100 p-4 shadow-[2px_0_5px_rgba(0,0,0,0.02)] ${
+                        row.id === "tech" ? "bg-[#FAFBFC]" : row.id === "deliverables" ? "bg-[#F5F8FF]" : "bg-white"
+                      }`}
+                    >
+                      <span className={`text-[14px] font-bold ${row.id === "deliverables" ? "text-[#3182F6]" : "text-[#4E5968]"}`}>
+                        {row.id === "tech" && <span className="mb-1 block text-lg">⚙️</span>}
+                        {row.id === "deliverables" && <span className="mb-1 block text-lg">🎁</span>}
+                        {row.label}
+                      </span>
+                    </td>
+                    {compareItems.map((org) => (
+                      <td key={`${row.id}-${org.id}`} className="border-b border-gray-100 p-5 align-top">
+                        <p className={`whitespace-pre-line text-[14px] leading-relaxed ${
+                          row.id === "deliverables" ? "font-semibold text-[#1B64DA]" : "text-[#4E5968]"
+                        }`}>
+                          {row.value(org)}
+                        </p>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                <tr>
+                  <td className="sticky left-0 z-10 w-28 border-r border-gray-100 bg-white p-4 shadow-[2px_0_5px_rgba(0,0,0,0.02)]" />
+                  {compareItems.map((org) => (
+                    <td key={`link-${org.id}`} className="p-5">
+                      <a
+                        href={org.website || org.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex w-full items-center justify-center gap-1.5 rounded-[12px] bg-[#3182F6] py-3 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-[#1B64DA]"
+                      >
+                        방문하기 <ExternalLink size={14} />
+                      </a>
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function CompareCardSection({
-  label,
-  value,
-  tags,
-  accent = false,
-}: {
-  label: string;
-  value?: string;
-  tags?: string[];
-  accent?: boolean;
-}) {
-  return (
-    <div>
-      <span className="mb-1.5 block text-[12px] font-bold text-[#8B95A1]">{label}</span>
-      {tags ? (
-        <div className="flex flex-wrap gap-1.5">
-          {tags.length > 0 ? (
-            tags.map((tag) => (
-              <span key={tag} className="rounded-[6px] bg-[#F2F4F6] px-2 py-1 text-[11px] text-[#4E5968]">
-                {tag}
-              </span>
-            ))
-          ) : (
-            <p className="text-[14px] font-medium text-[#333D4B]">상세 확인 필요</p>
-          )}
-        </div>
-      ) : (
-        <p className={`text-[14px] font-medium leading-relaxed ${accent ? "text-[#3182F6]" : "text-[#333D4B]"}`}>
-          {value}
-        </p>
-      )}
     </div>
   );
 }
